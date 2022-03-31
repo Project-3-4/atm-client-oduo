@@ -1,6 +1,7 @@
 #include <Wire.h>
 #include <SPI.h>
 #include <MFRC522.h>
+#include <Keypad.h>
 
 /**
    SDA pin: 4
@@ -13,7 +14,6 @@
    3.3V pin: 3.3V
 
 */
-#include <Keypad.h>
 
 const byte ROWS = 4;
 const byte COLS = 4;
@@ -30,7 +30,10 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 char userInput[4] {'x', 'x', 'x', 'x'};
 String pinpas = "empty";
 int tries = 2;
-char opneemBedrag[4]= {'x', 'x', 'x', 'x'};
+char opneemBedrag[4] = {'x', 'x', 'x', 'x'};
+int opneemArray[4];
+int16_t bedrag;
+int16_t saldo = 9999;
 
 #define SS_PIN 4
 #define RST_PIN 3
@@ -41,14 +44,16 @@ void setup()
   Serial.begin(9600);   // Initiate a serial communication
   SPI.begin();      // Initiate  SPI bus
   Wire.begin(2);
+  Wire.onRequest(requestEvent); // register event
   mfrc522.PCD_Init();   // Initiate MFRC522
   pinMode(LED_BUILTIN, OUTPUT);
   digitalWrite(LED_BUILTIN, LOW);    // turn the LED off by making the voltage LOW
-
+  Serial.println("Approximate your card to the reader...");
 }
 void loop() {
-  Serial.println("Approximate your card to the reader...");
-  Serial.println();
+  bedrag = 0;
+  // Serial.println("Approximate your card to the reader...");
+  // Serial.println();
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent())
   {
@@ -116,12 +121,13 @@ void loop() {
         }
       }
       Serial.println(" ");
-      Serial.print(" You choose: ");
+      Serial.print(" You chose: ");
       for (int index = 0; index < 4; index++) {
         Serial.print(userInput[index]);
       }
       Serial.println(" ");
       delay(3000);
+      Serial.println("Approximate your card to the reader...");
 
       //      Serial.print("Choose your pincode: ");
       //      while (Serial.available() == 0){
@@ -138,6 +144,7 @@ void loop() {
       if (check == 0 && tries < 0) {
         Serial.println("CARD GOT DECLINED");
         delay(5000);
+        Serial.println("Approximate your card to the reader...");
       }
       while (check == 0 && tries >= 0) {
         Serial.print("please enter your password: ");
@@ -195,33 +202,86 @@ void loop() {
           digitalWrite(LED_BUILTIN, HIGH);   // turn the LED on (HIGH is the voltage level)
           int opnemen = 0;
           int getal = 0;
-          Serial.println("Geld opnemen: A, afbreken: B");
+          Serial.println("Withdraw: A, Quick Transaction: B, See Saldo: C, Cancel: D");
           while (opnemen == 0) {
             customKey = customKeypad.getKey();
             if (customKey) {
               if (customKey == 'A') {
                 int afbreken = 0;
+                Serial.println(" ");
+                Serial.println("Confirm: A, cancel: B");
                 while (afbreken == 0) {
                   customKey = customKeypad.getKey();
                   if (customKey == 'B') {
                     afbreken = 1;
                     opnemen = 1;
-                    Serial.println(" afbreken ");
+                    Serial.println(" canceling ");
                   }
-                  else if (customKey != "") {
-                    if (getal < 5) {
+                  else if (customKey == 'A' && getal >= 4) {
+                    afbreken = 1;
+                    opnemen = 1;
+                    for (int i = 0; i < 4; i++) {
+                      if (opneemBedrag[i] != 'x') {
+                        Serial.print(opneemBedrag[i]);
+                      }
+                    }
+                    Serial.println(" ");
+                    array2Int();
+                  }
+                  else if (customKey == 'A' && getal < 4) {
+                    for (int i = 0; i < 4; i++){
+                      if (opneemBedrag[i] == 'x'){
+                        for (int j = i; j >= 0; j--) {
+                          opneemBedrag[j] = opneemBedrag[j-1];
+                          if(j-1 > 0){
+                            opneemBedrag[j-1] = 'x';
+                          }
+                        }
+                        opneemBedrag[0] = '0';
+                      }
+                    }
+                    for (int i = 0; i< 4; i++){
+                      Serial.println(opneemBedrag[i]);
+                    }
+                    afbreken = 1;
+                    opnemen = 1;
+                    array2Int();
+                    //Serial.println("Not a valid value");
+                  }
+                  else if (customKey == '#') {
+                     opneemBedrag[getal-1] = NULL;
+                     getal--;
+                     Serial.println("Backspace");
+                  }
+                  else if (customKey != NULL) {
+                    if (getal < 4) {
                       opneemBedrag[getal] = customKey;
                       getal++;
+                      Serial.println(customKey);
+                    }
+                    if (getal >= 4) {
+                      Serial.println("Confirm: A, Cancel: B");
                     }
                   }
                 }
               }
+              else if (customKey == 'D') {
+                opnemen = 1;
+                Serial.println(" canceling ");
+              }
               else if (customKey == 'B') {
+                bedrag = 50;
+                opnemen = 1;
+              }
+              else if (customKey == 'C') {
+                Serial.println(saldo);
                 opnemen = 1;
               }
             }
           }
+          saldo = saldo - bedrag;
           delay(5000);
+          Serial.println("Approximate your card to the reader...");
           return;
         }
         else {
@@ -244,7 +304,30 @@ void loop() {
     delay(5000);
   }
 }
+void array2Int() {
+  int temp;
+  for (int i = 0; i < 4; i++) {
+    if (opneemBedrag[i] != 'x') {
+      temp = opneemBedrag[i] - '0';
+      opneemArray[i] = temp;
+    }
+  }
+  for (int i = 0; i < 4; i++) {
+    bedrag *= 10;
+    bedrag += opneemArray[i];
+  }
+  //  byte highbyte=bedrag>>8; //shift right 8 bits, leaving only the 8 high bits.
+  //  byte lowbyte=bedrag&0xFF; //bitwise AND with 0xFF
+
+  // Serial.println(bedrag);
+}
 
 void requestEvent() {
-  Wire.write(opneemBedrag[4]);
+  byte highbyte = bedrag >> 8; //shift right 8 bits, leaving only the 8 high bits.
+  byte lowbyte = bedrag & 0xFF; //bitwise AND with 0xFF
+  //Serial.println(bedrag);
+  //Serial.println(highbyte);
+  Wire.write(highbyte);
+  //Serial.println(lowbyte);
+  Wire.write(lowbyte);
 }
