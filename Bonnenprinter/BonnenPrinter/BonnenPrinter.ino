@@ -10,6 +10,8 @@
 SoftwareSerial mySerial(RX_PIN, TX_PIN);
 Adafruit_Thermal printer(&mySerial);
 
+int bedrag;
+
 void setup() {
   Wire.begin(2);
   Wire.onReceive(receiveEvent);
@@ -24,7 +26,6 @@ void loop() {
 }
 
 void receiveEvent() {
-  int16_t bedrag;
   while (Wire.available()) {
     byte highbyte = Wire.read();
     byte lowbyte = Wire.read();
@@ -88,7 +89,7 @@ void printBon() {
   printer.println(F("Opgenomen Bedrag"));
   printer.setSize('S');
   printer.print(F("$ "));
-  printer.println(F(bedrag));
+  printer.println(bedrag);
   printer.feed(2);
 
   printer.boldOn();
