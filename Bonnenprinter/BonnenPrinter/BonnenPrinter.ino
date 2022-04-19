@@ -29,6 +29,7 @@ void receiveEvent() {
     byte highbyte = Wire.read();
     byte lowbyte = Wire.read();
     bedrag = (highbyte << 8) | lowbyte;
+    printBon();
   }
   Serial.println(bedrag);
 }
@@ -86,7 +87,8 @@ void printBon() {
   printer.setSize('M');
   printer.println(F("Opgenomen Bedrag"));
   printer.setSize('S');
-  printer.println(F("$ 00,00"));
+  printer.print(F("$ "));
+  printer.println(F(bedrag));
   printer.feed(2);
 
   printer.boldOn();
