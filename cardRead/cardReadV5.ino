@@ -13,7 +13,8 @@
    RST pin: 3
    3.3V pin: 3.3V
 */
-
+byte highbyte;
+byte lowbyte;
 const byte ROWS = 4;
 const byte COLS = 4;
 char hexaKeys[ROWS][COLS] = {
@@ -223,12 +224,13 @@ void loop() {
                       }
                     }
                     Serial.println(" ");
-                    bonOpvragen();
                     array2Int();
+                    bonOpvragen();
                     saldo = saldo - bedrag;
                     for (int i = 0; i < 4; i++) {
                       opneemBedrag[i] = 'x';
                     }
+                    bedrag = 0;
                     getal = 0;
                     //Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
                   }
@@ -341,10 +343,15 @@ void array2Int() {
 }
 
 void sendItem() {
-  byte highbyte = bedrag >> 8; //shift right 8 bits, leaving only the 8 high bits.
-  byte lowbyte = bedrag & 0xFF; //bitwise AND with 0xFF
-  Wire.write(highbyte);
-  Wire.write(lowbyte);
+  Serial.println(bedrag); 
+  highbyte = NULL;
+  lowbyte = NULL;
+  highbyte = (bedrag >> 8); //shift right 8 bits, leaving only the 8 high bits.
+  lowbyte = bedrag & 0xFF; //bitwise AND with 0xFF
+  Serial.print(highbyte);
+  Serial.println(lowbyte);
+  int tes = bedrag = (highbyte << 8) | lowbyte;
+  Serial.println(tes);
 }
 
 void bonOpvragen() {
@@ -354,8 +361,11 @@ void bonOpvragen() {
     char customKey = customKeypad.getKey();
     if (customKey == 'A') {
       Serial.println(" Reciept is being printed ");
-      Wire.beginTransmission(2);
       sendItem();
+      Wire.beginTransmission(2);
+      Wire.write(highbyte);
+      Wire.write(lowbyte);
+      // Serial.println("test");
       Wire.endTransmission();
       Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
       return;
