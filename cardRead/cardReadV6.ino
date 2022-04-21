@@ -3,16 +3,14 @@
 #include <MFRC522.h>
 #include <Keypad.h>
 
-
 #define DS3231_I2C_ADDRESS 0x68 // Convert normal decimal numbers to binary coded decimal
-byte decToBcd(byte val){
- return( (val/10*16) + (val%10) );
-}
- 
-byte bcdToDec(byte val){  // Convert binary coded decimal to normal decimal numbers
- return( (val/16*10) + (val%16) );
+byte decToBcd(byte val) {
+  return ( (val / 10 * 16) + (val % 10) );
 }
 
+byte bcdToDec(byte val) { // Convert binary coded decimal to normal decimal numbers
+  return ( (val / 16 * 10) + (val % 16) );
+}
 
 /**
    SDA pin: 4
@@ -24,6 +22,9 @@ byte bcdToDec(byte val){  // Convert binary coded decimal to normal decimal numb
    RST pin: 3
    3.3V pin: 3.3V
 */
+
+int minBedrag = 10;
+int maxBedrag = 300;
 byte highbyte;
 byte lowbyte;
 const byte ROWS = 4;
@@ -61,10 +62,7 @@ void setup()
   Serial.println("Approximate your card to the reader...");
 }
 void loop() {
-  // displayTime();
   bedrag = 0;
-  // Serial.println("Approximate your card to the reader...");
-  // Serial.println();
   // Look for new cards
   if ( ! mfrc522.PICC_IsNewCardPresent())
   {
@@ -87,7 +85,6 @@ void loop() {
     content.concat(String(mfrc522.uid.uidByte[i], HEX));
   }
   Serial.println();
-  //Serial.println("Message : ");
   content.toUpperCase();
   if ((content.substring(1) == "B7 ED 7D 5A") || (content.substring(1) == "07 18 72 B4") ) //change here the UID of the card/cards that you want to give access
   {
@@ -117,9 +114,8 @@ void loop() {
                 j = 5;
               }
             }
-            //Serial.println(" ");
           }
-          else if (customKey != "") {
+          else if (customKey != NULL && customKey != 'A' && customKey != 'B' && customKey != 'C' && customKey != 'D') {
             userInput[test] = customKey;
             Serial.print(customKey);
             delay(500);
@@ -173,9 +169,8 @@ void loop() {
                   j = 5;
                 }
               }
-              //Serial.println(" ");
             }
-            else if (customKey != " ") {
+            else if (customKey != NULL && customKey != 'A' && customKey != 'B' && customKey != 'C' && customKey != 'D') {
               userPass[i] = customKey;
               Serial.print(customKey);
               delay(500);
@@ -217,7 +212,6 @@ void loop() {
                   customKey = customKeypad.getKey();
                   if (customKey == 'B') {
                     afbreken = 1;
-                    // opnemen = 1;
                     Serial.println(" canceling ");
                     Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
                     for (int i = 0; i < 4; i++) {
@@ -237,14 +231,27 @@ void loop() {
                     }
                     Serial.println(" ");
                     array2Int();
-                    bonOpvragen();
-                    saldo = saldo - bedrag;
-                    for (int i = 0; i < 4; i++) {
-                      opneemBedrag[i] = 'x';
+                    if (bedrag >= minBedrag && bedrag <= maxBedrag) {
+                      bonOpvragen();
+                      saldo = saldo - bedrag;
+                      leegInvoer();
+                      bedrag = 0;
+                      getal = 0;
+                      Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
                     }
-                    bedrag = 0;
-                    getal = 0;
-                    Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
+                    else {
+                      Serial.println("Not a valid value");
+                      Serial.println("value must be within 10 and 300");
+                      leegInvoer();
+                      Serial.println(" ");
+                      Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
+                      for (int i = 3; i >= 0; i--) {
+                        opneemArray[i] = NULL;
+                      }
+                      getal = 0;
+                      bedrag = 0;
+                    }
+                    continue;
                   }
                   else if (customKey == 'A' && getal < 4) {
                     Serial.println(" ");
@@ -254,31 +261,44 @@ void loop() {
                           opneemBedrag[j] = opneemBedrag[j - 1];
                           if (j - 1 >= 0) {
                             opneemBedrag[j - 1] = 'x';
-                            Serial.println(opneemBedrag[j - 1]);
                           }
                         }
-                        // opneemBedrag[0] = 'x';
                       }
                     }
+
                     for (int i = 0; i < 4; i++) {
-                      //Serial.println(opneemBedrag[i]);
-                      if(opneemBedrag[i] != 'x'){
-                        Serial.println(opneemBedrag[i]);
-                      }                     
+                      if (opneemBedrag[i] != 'x') {
+                        Serial.print(opneemBedrag[i]);
+                      }
                     }
-                    afbreken = 1;
-                    // opnemen = 1;
+                    Serial.println(" ");
                     array2Int();
-                    bonOpvragen();
-                    saldo = saldo - bedrag;
-                    Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
-                    for (int i = 0; i < 4; i++) {
-                      opneemBedrag[i] = 'x';
+                    if (bedrag >= minBedrag && bedrag <= maxBedrag) {
+                      afbreken = 1;
+                      bonOpvragen();
+                      saldo = saldo - bedrag;
+                      Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
+                      leegInvoer();
+                      for (int i = 3; i >= 0; i--) {
+                        opneemArray[i] = NULL;
+                      }
+                      bedrag = 0;
+                      getal = 0;
                     }
-                    bedrag = 0;
-                    getal = 0;
+                    else {
+                      Serial.println("Not a valid value");
+                      Serial.println("value must be within 10 and 300");
+                      leegInvoer();
+                      Serial.println(" ");
+                      Serial.println("Confirm: A, cancel: B");
+                      Serial.print("enter an amount: ");
+                      for (int i = 3; i >= 0; i--) {
+                        opneemArray[i] = NULL;
+                      }
+                      getal = 0;
+                      bedrag = 0;
+                    }
                     continue;
-                    //Serial.println("Not a valid value");
                   }
                   else if (customKey == '#') {
                     opneemBedrag[getal - 1] = 'x';
@@ -306,7 +326,7 @@ void loop() {
               }
               else if (customKey == 'D') {
                 opnemen = 1;
-                Serial.println(" canceling ");
+                Serial.println(" Goodbye ");
               }
               else if (customKey == 'B') {
                 bedrag = 50;
@@ -320,7 +340,6 @@ void loop() {
               else if (customKey == 'C') {
                 Serial.print("Balance is: ");
                 Serial.println(saldo);
-                // opnemen = 1;
                 Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
                 continue;
               }
@@ -368,15 +387,15 @@ void array2Int() {
 }
 
 void sendItem() {
-  Serial.println(bedrag); 
+  //  Serial.println(bedrag);
   highbyte = NULL;
   lowbyte = NULL;
   highbyte = (bedrag >> 8); //shift right 8 bits, leaving only the 8 high bits.
   lowbyte = bedrag & 0xFF; //bitwise AND with 0xFF
-  Serial.print(highbyte);
-  Serial.println(lowbyte);
-  int tes = bedrag = (highbyte << 8) | lowbyte;
-  Serial.println(tes);
+  //  Serial.print(highbyte);
+  //  Serial.println(lowbyte);
+  //  int tes = bedrag = (highbyte << 8) | lowbyte;
+  //  Serial.println(tes);
 }
 
 void bonOpvragen() {
@@ -398,27 +417,9 @@ void bonOpvragen() {
       Wire.write(month);
       Wire.write(year);
       Wire.endTransmission();
-      Serial.print("minute: ");
-      Serial.println(minute);
-
-      Serial.print("hour: ");
-      Serial.println(hour);
-
-      Serial.print("dayOfMonth: ");
-      Serial.println(dayOfMonth);
-
-      Serial.print("Month: ");
-      Serial.println(month);
-
-      Serial.print("year: ");
-      Serial.println(year);
-      
-      // Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
       return;
     }
     else if (customKey == 'B') {
-      // Serial.println(" canceling ");
-      // Serial.println("Withdraw: A, Quick Transaction ($50): B, See Balance: C, Done: D");
       return;
     }
     else if (customKey == NULL) {
@@ -428,73 +429,79 @@ void bonOpvragen() {
 }
 
 void readDS3231time(byte *second,
- byte *minute,
- byte *hour,
- byte *dayOfWeek,
- byte *dayOfMonth,
- byte *month,
- byte *year){
- Wire.beginTransmission(DS3231_I2C_ADDRESS);
- Wire.write(0); // set DS3231 register pointer to 00h
- Wire.endTransmission();
- Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
- // request seven bytes of data from DS3231 starting from register 00h
- *second = bcdToDec(Wire.read() & 0x7f);
- *minute = bcdToDec(Wire.read());
- *hour = bcdToDec(Wire.read() & 0x3f);
- *dayOfWeek = bcdToDec(Wire.read());
- *dayOfMonth = bcdToDec(Wire.read());
- *month = bcdToDec(Wire.read());
- *year = bcdToDec(Wire.read());
+                    byte *minute,
+                    byte *hour,
+                    byte *dayOfWeek,
+                    byte *dayOfMonth,
+                    byte *month,
+                    byte *year) {
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0); // set DS3231 register pointer to 00h
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
+  // request seven bytes of data from DS3231 starting from register 00h
+  *second = bcdToDec(Wire.read() & 0x7f);
+  *minute = bcdToDec(Wire.read());
+  *hour = bcdToDec(Wire.read() & 0x3f);
+  *dayOfWeek = bcdToDec(Wire.read());
+  *dayOfMonth = bcdToDec(Wire.read());
+  *month = bcdToDec(Wire.read());
+  *year = bcdToDec(Wire.read());
 }
 
 
-void displayTime(){
- byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
- // retrieve data from DS3231
- readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month,
- &year);
- // send it to the serial monitor
- Serial.print(hour, DEC);
- // convert the byte variable to a decimal number when displayed
- Serial.print(":");
- if (minute<10){
- Serial.print("0");
- }
- Serial.print(minute, DEC);
- Serial.print(":");
- if (second<10){
- Serial.print("0");
- }
- Serial.print(second, DEC);
- Serial.print(" ");
- Serial.print(dayOfMonth, DEC);
- Serial.print("/");
- Serial.print(month, DEC);
- Serial.print("/");
- Serial.print(year, DEC);
- Serial.print(" Day of week: ");
- switch(dayOfWeek){
- case 1:
- Serial.println("Sunday");
- break;
- case 2:
- Serial.println("Monday");
- break;
- case 3:
- Serial.println("Tuesday");
- break;
- case 4:
- Serial.println("Wednesday");
- break;
- case 5:
- Serial.println("Thursday");
- break;
- case 6:
- Serial.println("Friday");
- break;
- case 7:
- Serial.println("Saturday");
- break;
- }
+void displayTime() {
+  byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
+  // retrieve data from DS3231
+  readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month,
+                 &year);
+  // send it to the serial monitor
+  Serial.print(hour, DEC);
+  // convert the byte variable to a decimal number when displayed
+  Serial.print(":");
+  if (minute < 10) {
+    Serial.print("0");
+  }
+  Serial.print(minute, DEC);
+  Serial.print(":");
+  if (second < 10) {
+    Serial.print("0");
+  }
+  Serial.print(second, DEC);
+  Serial.print(" ");
+  Serial.print(dayOfMonth, DEC);
+  Serial.print("/");
+  Serial.print(month, DEC);
+  Serial.print("/");
+  Serial.print(year, DEC);
+  Serial.print(" Day of week: ");
+  switch (dayOfWeek) {
+    case 1:
+      Serial.println("Sunday");
+      break;
+    case 2:
+      Serial.println("Monday");
+      break;
+    case 3:
+      Serial.println("Tuesday");
+      break;
+    case 4:
+      Serial.println("Wednesday");
+      break;
+    case 5:
+      Serial.println("Thursday");
+      break;
+    case 6:
+      Serial.println("Friday");
+      break;
+    case 7:
+      Serial.println("Saturday");
+      break;
+  }
+}
+
+void leegInvoer() {
+  for (int i = 0; i < 4; i++) {
+    opneemBedrag[i] = 'x';
+  }
 }
