@@ -17,10 +17,9 @@ void setup() {
   Wire.begin(2);
   Wire.onReceive(receiveEvent);
   pinMode(7, OUTPUT); digitalWrite(7, LOW);
-
+  
   mySerial.begin(9600);  // Initialize SoftwareSerial
   printer.begin();        // Init printer (same regardless of serial type)
-
 }
 void loop() {
   if (printReceipt == 1) {
@@ -38,7 +37,6 @@ void receiveEvent() {
     day = Wire.read();
     month = Wire.read();
     year= Wire.read();
-//    printer.print(hour);
     bedrag = (highbyte << 8) | lowbyte;
   }
   printReceipt = 1;
@@ -48,9 +46,10 @@ void printBon() {
   printer.println(F("OME-DUO"));
 
   printer.setSize('S');
-  printer.inverseOn();
-  printer.println(F(".                              ."));
-  printer.inverseOff();
+  printer.feed(1);
+//  printer.inverseOn();
+//  printer.println(F(".                              ."));
+//  printer.inverseOff();
 
   printer.boldOn();
   printer.println(F("Adres:"));
@@ -66,6 +65,9 @@ void printBon() {
   printer.boldOff();
   printer.print(hour);
   printer.print(F(":"));
+  if (minute <= 9) {
+    printer.print("0");
+  }
   printer.println(minute);
   printer.justify('L');
 
@@ -104,7 +106,9 @@ void printBon() {
   printer.setSize('M');
   printer.println(F("Opgenomen Bedrag"));
   printer.setSize('S');
-  printer.print(F("Ð "));
+  printer.setCharset(CHARSET_NORWAY);
+  printer.write(0x24);
+  printer.print(" ");
   printer.println(bedrag);
   printer.feed(2);
 
