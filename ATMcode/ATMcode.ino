@@ -1,3 +1,9 @@
+/**
+    TODO:
+    reset tries when pressing button
+    Groenland code on pass: GRODUO0000123400 == 47 52 4F 44 55 4F 30 30 30 30 31 32 33 34 30 30
+*/
+#include <Wire.h>
 #include <SPI.h>
 #include <MFRC522.h>
 #include <Keypad.h>
@@ -14,12 +20,19 @@
 */
 
 
-
-
 #define ResetPin 3
 #define SlaveSelectPin 4
 MFRC522 mfrc522(SlaveSelectPin, ResetPin); // Create MFRC522 instance.
 MFRC522::MIFARE_Key key; // Crytpokey for accessing blocks
+
+#define DS3231_I2C_ADDRESS 0x68 // Convert normal decimal numbers to binary coded decimal
+byte decToBcd(byte val) {
+  return ( (val / 10 * 16) + (val % 10) );
+}
+byte bcdToDec(byte val) { // Convert binary coded decimal to normal decimal numbers
+  return ( (val / 16 * 10) + (val % 16) );
+}
+
 
 const byte ROWS = 4;
 const byte COLS = 4;
@@ -36,6 +49,7 @@ Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS)
 char customKey;
 int userIndex = 0;
 char userInput[4] {'x', 'x', 'x', 'x'};
+char otherVal[3] {'x', 'x', 'x'};
 char pinCode[4] {'1', '2', '3', '4'};
 boolean confermedPass = false;
 int tries = 3;
@@ -43,10 +57,10 @@ int faults = 0;
 boolean confermedCode = false;
 boolean passScanned = false;
 boolean exitPass = false;
-
-
-
-
+int saldo = 500;
+int opneembedrag;
+byte highbyte;
+byte lowbyte;
 
 void setup() {
   Serial.begin(9600); // Initialize serial communications with the PC
@@ -84,12 +98,12 @@ void loop() {
   }
   else {
     confermedCode = true;
-    Serial.println("Welcome");
   }
 
   if (confermedCode == true) {
-    Serial.println("test1");
     passScanned = false;
+    tries = 3;
+    mainMenu();
   }
   else {
     Serial.println(confermedCode);
@@ -99,6 +113,287 @@ void loop() {
   }
 }
 
+
+void sendItem() {
+  Serial.println("test");
+  highbyte = NULL;
+  lowbyte = NULL;
+  highbyte = (opneembedrag >> 8); //shift right 8 bits, leaving only the 8 high bits.
+  lowbyte = opneembedrag & 0xFF; //bitwise AND with 0xFF
+}
+
+void printBon() {
+  Serial.println("printing receipt");
+  byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
+  readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
+  sendItem();
+  Wire.beginTransmission(2);
+  Wire.write(highbyte);
+  Wire.write(lowbyte);
+  Wire.write(minute);
+  Wire.write(hour);
+  Wire.write(dayOfMonth);
+  Wire.write(month);
+  Wire.write(year);
+  Wire.endTransmission();
+  quit();
+}
+
+void quit() {
+  Serial.println("thanks for using Ome DUO have a nice day");
+  confermedPass = true;
+  passScanned = false;
+  Serial.println("Approximate your card to the reader...");
+}
+void bonOpvragen() {
+  Serial.println("Would you like a repeipt? ");
+  Serial.println("C: yes, D: no");
+  boolean othermenu = false;
+  while (othermenu == false) {
+    customKey = customKeypad.getKey();
+    if (customKey) {
+      if (customKey == 'C') {
+        othermenu = true;
+        Serial.println("please wait until de dispenser opens");
+        Serial.println("you can withdraw the cash from the cash dispenser now");
+        printBon();
+      }
+      else if (customKey == 'D') {
+        othermenu = true;
+        Serial.println("please wait until de dispenser opens");
+        Serial.println("you can withdraw the cash from the cash dispenser now");
+        quit();
+      }
+    }
+  }
+}
+void confirmWithdraw() {
+  Serial.print("Are you sure you would like to withdraw ");
+  Serial.println(opneembedrag);
+  Serial.println("C: yes, D: no");
+  boolean othermenu = false;
+  while (othermenu == false) {
+    customKey = customKeypad.getKey();
+    if (customKey) {
+      if (customKey == 'C') {
+        othermenu = true;
+        saldo = saldo - opneembedrag;
+        bonOpvragen();
+      }
+      else if (customKey == 'D') {
+        othermenu = true;
+        withdraw();
+      }
+    }
+  }
+}
+
+void array2Int() {
+  int opneemArray[3];
+  int temp;
+  int count = 0;
+  for (int i = 2; i >= 0; i--) {
+    if (otherVal[i] == 'x') {
+      count++;
+    }
+    if (otherVal[i] != 'x') {
+      temp = otherVal[i] - '0';
+      opneemArray[i] = temp;
+    }
+  }
+  opneembedrag = 0;
+  for (int i = 0; i < 3 - count; i++) {
+    opneembedrag *= 10;
+    opneembedrag += opneemArray[i];
+  }
+}
+
+void otherValue() {
+  Serial.println("What amount would you like to withdraw?");
+  Serial.println("amount cant be: smaller than 10 or bigger than 300");
+  Serial.println("B: undo, C: confirm, D: quit");
+  Serial.print("amount: ");
+  boolean othermenu = false;
+  int invoerIndex = 0;
+  while (othermenu == false) {
+    customKey = customKeypad.getKey();
+    if (customKey) {
+      if (customKey == 'B') {
+        if (invoerIndex > 0) {
+          invoerIndex --;
+          otherVal[invoerIndex] = 'x';
+          Serial.print("amount: ");
+          for (int i = 0; i <= invoerIndex; i++) {
+            if (otherVal[i] != 'x') {
+              Serial.print(otherVal[i]);
+            }
+          }
+        }
+      }
+      else if (customKey == 'C') {
+        othermenu = true;
+        array2Int();
+        if (opneembedrag >= 10 && opneembedrag <= 300) {
+          for (int i = 0; i < 3; i++) {
+            otherVal[i] = 'x';
+          }
+          confirmWithdraw();
+        }
+        else {
+          Serial.println(" ");
+          Serial.println("amount cant be: smaller than 10 or bigger than 300");
+          Serial.println("B: undo, C: confirm, D: quit");
+          Serial.print("amount: ");
+          for (int i = 0; i < 3; i++) {
+            if (otherVal[i] != 'x') {
+              Serial.print(otherVal[i]);
+            }
+          }
+          othermenu = false;
+        }
+      }
+      else if (customKey == 'D') {
+        for (int i = 0; i < 3; i++) {
+          otherVal[i] = 'x';
+        }
+        othermenu = true;
+        mainMenu();
+      }
+      else if (customKey != NULL && customKey != 'A' && customKey != 'B' && customKey != 'C' && customKey != 'D' && customKey != '*' && customKey != '#') {
+        otherVal[invoerIndex] = customKey;
+        Serial.print(customKey);
+        delay(200);
+        invoerIndex++;
+        if (invoerIndex == 3) {
+          Serial.println(" ");
+          Serial.println("C: confirm");
+        }
+      }
+    }
+  }
+}
+void withdraw() {
+  Serial.println("pin Amount");
+  Serial.println("1: 20 | A: 200");
+  Serial.println("4: 50 | B: 300");
+  Serial.println("7: 100 | C: other");
+  Serial.println("*: 150 | D: return");
+  boolean othermenu = false;
+  while (othermenu == false) {
+    customKey = customKeypad.getKey();
+    if (customKey) {
+      if (customKey == '1') {
+        othermenu = true;
+        opneembedrag = 20;
+        confirmWithdraw();
+      }
+      else if (customKey == '4') {
+        othermenu = true;
+        opneembedrag = 50;
+        confirmWithdraw();
+      }
+      else if (customKey == '7') {
+        othermenu = true;
+        opneembedrag = 100;
+        confirmWithdraw();
+      }
+      else if (customKey == '*') {
+        othermenu = true;
+        opneembedrag = 150;
+        confirmWithdraw();
+      }
+      else if (customKey == 'A') {
+        othermenu = true;
+        opneembedrag = 200;
+        confirmWithdraw();
+      }
+      else if (customKey == 'B') {
+        othermenu = true;
+        opneembedrag = 300;
+        confirmWithdraw();
+      }
+      else if (customKey == 'C') {
+        othermenu = true;
+        otherValue();
+      }
+      else if (customKey == 'D') {
+        othermenu = true;
+        mainMenu();
+      }
+    }
+  }
+}
+
+
+void seeBalance() {
+  Serial.print("Balance: ");
+  Serial.println(saldo);
+  Serial.println("A: withdraw, D: return");
+  boolean othermenu = false;
+  while (othermenu == false) {
+    customKey = customKeypad.getKey();
+    if (customKey) {
+      if (customKey == 'A') {
+        othermenu = true;
+        withdraw();
+      }
+      else if (customKey == 'D') {
+        othermenu = true;
+        mainMenu();
+      }
+    }
+  }
+}
+void quickTransaction() {
+  opneembedrag = 70;
+  confirmWithdraw();
+}
+
+void mainMenu() {
+  Serial.println("A: Balance, B: Withdraw, C: Quick transaction, D: Quit");
+  boolean othermenu = false;
+  while (othermenu == false) {
+    customKey = customKeypad.getKey();
+    if (customKey) {
+      if (customKey == 'A') {
+        othermenu = true;
+        seeBalance();
+      }
+      else if (customKey == 'B') {
+        othermenu = true;
+        if (saldo >= 0) {
+          withdraw();
+        }
+        else {
+          Serial.println("not enough money to withdraw");
+          othermenu = false;
+          Serial.println("A: Balance, B: Withdraw, C: Quick transaction, D: Quit");
+        }
+      }
+      else if (customKey == 'C') {
+        othermenu = true;
+        if (saldo >= 0) {
+          quickTransaction();
+        }
+        else {
+          Serial.println("not enough money to withdraw");
+          othermenu = false;
+          Serial.println("A: Balance, B: Withdraw, C: Quick transaction, D: Quit");
+        }
+      }
+      else if (customKey == 'D') {
+        othermenu = true;
+        quit();
+      }
+    }
+  }
+}
+
+void clearPin() {
+  for (int i = 0; i < 4; i++) {
+    userInput[i] = 'x';
+  }
+}
 void enterPincode() {
   if ( tries <= 0 ) {
     passScanned = false;
@@ -111,7 +406,7 @@ void enterPincode() {
     confermedPass = true;
   }
   while (true) {
-    Serial.println("#: Undo, B: Quit");
+    Serial.println("B: Undo, D: Quit");
     if (confermedPass == true) {
       passScanned = true;
       Serial.print(" Enter your pincode: ");
@@ -119,14 +414,15 @@ void enterPincode() {
       while (userIndex < 4) {
         customKey = customKeypad.getKey();
         if (customKey) {
-          if (customKey == '#' && userIndex > 0) {
+          if (customKey == 'B' && userIndex > 0) {
             backSpace();
           }
-          else if (customKey == 'B') {
+          else if (customKey == 'D') {
             Serial.println("Quiting");
             exitPass = true;
             confermedPass = false;
             passScanned = false;
+            clearPin();
             delay(3000);
             Serial.println("Approximate your card to the reader...");
             return;
@@ -143,25 +439,27 @@ void enterPincode() {
           }
           if (userIndex == 4) {
             Serial.println(" ");
-            Serial.println("A: Confirm, B: Quit");
+            Serial.println("C: Confirm, D: Quit");
             faults = 0;
             boolean exitloop = false;
             while (exitloop == false) {
               customKey = customKeypad.getKey();
-              if (customKey == 'A') {
+              if (customKey == 'C') {
                 for (int i = 0; i < 4; i++) {
                   if (userInput[i] != pinCode[i]) {
                     faults++;
                   }
                 }
                 exitPass = false;
+                clearPin();
                 return;
               }
-              else if (customKey == 'B') {
+              else if (customKey == 'D') {
                 Serial.println("Quiting");
                 exitPass = true;
                 confermedPass = false;
                 passScanned = false;
+                clearPin();
                 delay(3000);
                 Serial.println("Approximate your card to the reader...");
                 return;
@@ -351,4 +649,25 @@ void backSpace() {
       }
     }
   }
+}
+
+void readDS3231time(byte *second,
+                    byte *minute,
+                    byte *hour,
+                    byte *dayOfWeek,
+                    byte *dayOfMonth,
+                    byte *month,
+                    byte *year) {
+  Wire.beginTransmission(DS3231_I2C_ADDRESS);
+  Wire.write(0); // set DS3231 register pointer to 00h
+  Wire.endTransmission();
+  Wire.requestFrom(DS3231_I2C_ADDRESS, 7);
+  // request seven bytes of data from DS3231 starting from register 00h
+  *second = bcdToDec(Wire.read() & 0x7f);
+  *minute = bcdToDec(Wire.read());
+  *hour = bcdToDec(Wire.read() & 0x3f);
+  *dayOfWeek = bcdToDec(Wire.read());
+  *dayOfMonth = bcdToDec(Wire.read());
+  *month = bcdToDec(Wire.read());
+  *year = bcdToDec(Wire.read());
 }
