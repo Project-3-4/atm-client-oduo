@@ -1,8 +1,11 @@
 /**
     TODO:
     reset tries when pressing button
-    Groenland code on pass: GRODUO0000123400 == 47 52 4F 44 55 4F 30 30 30 30 31 32 33 34 30 30
+    Groenland code on pass: GRODUO0000123400 == 47 4C 4F 44 55 4F 30 30 30 30 31 32 33 34 30 30
+    I2C IBAN number
+    passnumber --> hex to char array
 */
+
 #include <Wire.h>
 #include <SPI.h>
 #include <MFRC522.h>
@@ -61,18 +64,22 @@ int saldo = 500;
 int opneembedrag;
 byte highbyte;
 byte lowbyte;
+int passNr;
+int lastnum;
+int lastNumbers[6];
 
 void setup() {
   Serial.begin(9600); // Initialize serial communications with the PC
   while (!Serial);    // Do nothing if no serial port is opened (added for Arduinos based on ATMEGA32U4)
   SPI.begin();        // Init SPI bus
+  Wire.begin();       // Init I2C bus
   mfrc522.PCD_Init(); // Init MFRC522 Module
 
   // Set default Crypto key for the trailer block (factory default)
   for (byte i = 0; i < 6; i++) {
     key.keyByte[i] = 0xFF;
   }
-  Serial.println(F("WARNING: Data will be written to the PICC, in sector #1"));
+  Serial.println(F("WARNING: Data will be written to the PICC, in sector #0"));
   Serial.println("Approximate your card to the reader...");
 }
 
@@ -103,6 +110,7 @@ void loop() {
   if (confermedCode == true) {
     passScanned = false;
     tries = 3;
+    array2passnum();
     mainMenu();
   }
   else {
@@ -115,7 +123,6 @@ void loop() {
 
 
 void sendItem() {
-  Serial.println("test");
   highbyte = NULL;
   lowbyte = NULL;
   highbyte = (opneembedrag >> 8); //shift right 8 bits, leaving only the 8 high bits.
@@ -127,7 +134,9 @@ void printBon() {
   byte second, minute, hour, dayOfWeek, dayOfMonth, month, year;
   readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
   sendItem();
-  Wire.beginTransmission(2);
+  Serial.println(second);
+  Serial.println(year);
+  Wire.beginTransmission(4);
   Wire.write(highbyte);
   Wire.write(lowbyte);
   Wire.write(minute);
@@ -187,6 +196,23 @@ void confirmWithdraw() {
     }
   }
 }
+
+void array2passnum(){
+  int tempArray[2];
+  int temp;
+  int count = 0;
+  for(int i = 6; i >= 5; i--){
+    temp  = lastNumbers[i];
+    tempArray[i] = temp;
+  }
+  passNr = 0;
+  for(int i = 0; i < 2; i++){
+    passNr *= 10;
+    passNr += temp;
+  }
+  Serial.println(passNr);
+}
+
 
 void array2Int() {
   int opneemArray[3];
@@ -509,15 +535,15 @@ void lookForCard() {
     // To avoid damage to the PICC never write data to Sector #0
     // In this example we will write data to Sector #1
     // Covering Block #4 up to and including Block #7
-    byte sector = 1;
-    byte blockAddr = 4; // Sector #1, Block #0
+    byte sector = 0;
+    byte blockAddr = 1; // Sector #1, Block #0
     byte dataBlock[]  = {
-      0xE5, 0x02, 0x03, 0x04, //  1,  2,   3,  4,
-      0x05, 0x06, 0x07, 0x08, //  5,  6,   7,  8,
-      0x09, 0x0a, 0xff, 0x0b, //  9, 10, 255, 11,
-      0x0c, 0x0d, 0x0e, 0x0f  // 12, 13, 14, 15
+      0x47, 0x4C, 0x4F, 0x44, //  G,  L,   O,  D,
+      0x55, 0x4F, 0x30, 0x30, //  U,  O,   0,  0,
+      0x30, 0x30, 0x31, 0x32, //  0,  0,   1,  2,
+      0x33, 0x34, 0x30, 0x31  //  3,  4,   0,  1
     };
-    byte trailerBlock = 7; // Last block in Sector #1
+    byte trailerBlock = 3; // Last block in Sector #1
     MFRC522::StatusCode status;
     byte buffer[18];
     byte size = sizeof(buffer);
@@ -553,7 +579,7 @@ void lookForCard() {
     Serial.println();
 
 
-    /*** [6] Write data to block 4 (Sector #1, Block #0) ***/
+    /*** [6] Write data to block 1 (Sector #0, Block #1) ***/
     Serial.print(F("Writing data into block ")); Serial.print(blockAddr);
     Serial.println(F(" ..."));
     dump_byte_array(dataBlock, 16); Serial.println();
@@ -564,7 +590,7 @@ void lookForCard() {
     }
     Serial.println();
 
-    /*** [7] Read data from block 4 (Sector #1, Block #0) ***/
+    /*** [7] Read data from block 1 (Sector #0, Block #1) ***/
     Serial.print(F("Reading data from block ")); Serial.print(blockAddr);
     Serial.println(F(" ..."));
     status = (MFRC522::StatusCode) mfrc522.MIFARE_Read(blockAddr, buffer, &size);
@@ -584,6 +610,9 @@ void lookForCard() {
       // Compare buffer (= what we've read) with dataBlock (= what we've written)
       if (buffer[i] == dataBlock[i])
         count++;
+      if (i >= 9){
+        lastNumbers[i-9] = dataBlock[i];
+      }
     }
     Serial.print(F("Number of bytes that match = ")); Serial.println(count);
     if (count == 16) {
