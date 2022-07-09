@@ -3,6 +3,8 @@
     Groenland code on pass: GLODUO0000123400 == 47 4C 4F 44 55 4F 30 30 30 30 31 32 33 34 30 30
     Serial connection with GUI
     regel 444
+    regel 368
+    send 1 when saldo > 0
 */
 #include <Wire.h>
 #include <SPI.h>
@@ -45,6 +47,7 @@ byte rowPins[ROWS] = {A0, 10, 9, 8};
 byte colPins[COLS] = {7, 6, 5, 2};
 Keypad customKeypad = Keypad(makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS);
 
+bool printReceipt;
 char customKey;
 int userIndex = 0;
 char userInput[4] {'x', 'x', 'x', 'x'};
@@ -56,7 +59,7 @@ int faults = 0;
 boolean confermedCode = false;
 boolean passScanned = false;
 boolean exitPass = false;
-int saldo = 500;
+int saldo = 999;
 int opneembedrag;
 byte highbyte;
 byte lowbyte;
@@ -84,7 +87,6 @@ void loop() {
     return;
   }
   if (faults > 0) {
-    tries--;
     return;
   }
   else {
@@ -115,6 +117,7 @@ void printBon() {
   readDS3231time(&second, &minute, &hour, &dayOfWeek, &dayOfMonth, &month, &year);
   sendItem();
   Wire.beginTransmission(4);
+  Wire.write(printReceipt);
   Wire.write(highbyte);
   Wire.write(lowbyte);
   Wire.write(minute);
@@ -143,11 +146,13 @@ void bonOpvragen() {
       if (customKey == 'C') {
         Serial.println(customKey);
         othermenu = true;
+        printReceipt = true;
         printBon();
       }
       else if (customKey == 'D') {
         Serial.println(customKey);
         othermenu = true;
+        printReceipt = false;
         quit();
       }
     }
@@ -163,13 +168,13 @@ void confirmWithdraw() {
       if (customKey == 'C') {
         Serial.println(customKey);
         othermenu = true;
-        saldo = saldo - opneembedrag;
+        // saldo = saldo - opneembedrag;
         bonOpvragen();
       }
       else if (customKey == 'D') {
         Serial.println(customKey);
         othermenu = true;
-        withdraw();
+        mainMenu();
       }
     }
   }
@@ -198,7 +203,7 @@ void array2Int() {
   int opneemArray[3];
   int temp;
   int count = 0;
-  for (int i = 2; i >= 0; i--) {
+  for (int i = 0; i < 3; i++) {
     if (otherVal[i] == 'x') {
       count++;
     }
@@ -208,7 +213,7 @@ void array2Int() {
     }
   }
   opneembedrag = 0;
-  for (int i = 0; i < 3 - count; i++) {
+  for (int i = 0 + count; i < 3; i++) {
     opneembedrag *= 10;
     opneembedrag += opneemArray[i];
   }
@@ -221,11 +226,10 @@ void otherValue() {
     customKey = customKeypad.getKey();
     if (customKey) {
       if (customKey == 'B') {
-        Serial.println(customKey);
-        if (invoerIndex > 0) {
-          invoerIndex --;
+        if (invoerIndex < 1) {
+          invoerIndex ++;
           otherVal[invoerIndex] = 'x';
-          for (int i = 0; i <= invoerIndex; i++) {
+          for (int i = 0; i < 3; i++) {
             if (otherVal[i] != 'x') {
             }
           }
@@ -234,11 +238,17 @@ void otherValue() {
       else if (customKey == 'C') {
         Serial.println(customKey);
         othermenu = true;
+        otherVal[2] = '0';
         array2Int();
+        Serial.println(opneembedrag);
         if (opneembedrag >= 10 && opneembedrag <= 300) {
           for (int i = 0; i < 3; i++) {
             otherVal[i] = 'x';
           }
+          confirmWithdraw();
+        }
+        else if(opneembedrag > 300){
+          opneembedrag = 300;
           confirmWithdraw();
         }
         else {
@@ -259,12 +269,12 @@ void otherValue() {
       }
       else if (customKey != NULL && customKey != 'A' && customKey != 'B' && customKey != 'C' && customKey != 'D' && customKey != '*' && customKey != '#') {
         Serial.println(customKey);
-        if (invoerIndex < 3) {
+        if (invoerIndex < 2 && invoerIndex >= 0) {
           otherVal[invoerIndex] = customKey;
           delay(200);
-          invoerIndex++;
+          invoerIndex--;
         }
-        if (invoerIndex == 3) {
+        if (invoerIndex < 0) {
         }
       }
     }
@@ -334,7 +344,17 @@ void seeBalance() {
       if (customKey == 'A') {
         Serial.println(customKey);
         othermenu = true;
-        withdraw();
+        String data;
+        while (Serial.available() <= 0) {}
+        if (Serial.available() > 0) {
+          data = Serial.readStringUntil('\n');
+        }
+        if (data == "1") {
+          withdraw();
+        }
+        else {
+          mainMenu();
+        }
       }
       else if (customKey == 'D') {
         Serial.println(customKey);
@@ -347,7 +367,23 @@ void seeBalance() {
 
 void quickTransaction() {
   opneembedrag = 70;
-  confirmWithdraw();
+  boolean othermenu = false;
+  while (othermenu == false) {
+    customKey = customKeypad.getKey();
+    if (customKey) {
+      if (customKey == 'C') {
+        Serial.println(customKey);
+        othermenu = true;
+        // saldo = saldo - opneembedrag;
+        bonOpvragen();
+      }
+      else if (customKey == 'D') {
+        Serial.println(customKey);
+        othermenu = true;
+        mainMenu();
+      }
+    }
+  }
 }
 
 void mainMenu() {
@@ -363,7 +399,12 @@ void mainMenu() {
       else if (customKey == 'B') {
         Serial.println(customKey);
         othermenu = true;
-        if (saldo >= 0) {
+        String data;
+        while (Serial.available() <= 0) {}
+        if (Serial.available() > 0) {
+          data = Serial.readStringUntil('\n');
+        }
+        if (data == "1") {
           withdraw();
         }
         else {
@@ -373,7 +414,12 @@ void mainMenu() {
       else if (customKey == 'C') {
         Serial.println(customKey);
         othermenu = true;
-        if (saldo >= 0) {
+        String data;
+        while (Serial.available() <= 0) {}
+        if (Serial.available() > 0) {
+          data = Serial.readStringUntil('\n');
+        }
+        if (data == "1") {
           quickTransaction();
         }
         else {
@@ -443,17 +489,19 @@ void enterPincode() {
               if (customKey == 'C') {
                 Serial.println(customKey);
                 String data;
-                while (Serial.available() <=0){}
+                while (Serial.available() <= 0) {}
                 if (Serial.available() > 0) {
                   data = Serial.readStringUntil('\n');
                 }
-                if(data == "1"){
+                if (data == "1") {
                   faults = 0;
+                  tries = 3;
                 }
-                else{
+                else {
                   faults = 4;
+                  tries = 3;
                 }
-                
+
                 //                for (int i = 0; i < 4; i++) {
                 //                  if (userInput[i] != pinCode[i]) {
                 //                    faults++;
@@ -539,7 +587,7 @@ void lookForCard() {
     status = (MFRC522::StatusCode) mfrc522.MIFARE_Read(blockAddr, buffer, &size);
     if (status != MFRC522::STATUS_OK) {
     }
-
+  
     // Show data present in block 1 (Sector #0, Block #1)
     dump_byte_array(buffer, 16);
     // de laaste getallen uit de IBAN aflezen voor op de bon
